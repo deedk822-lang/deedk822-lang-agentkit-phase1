@@ -1,0 +1,15 @@
+2025-10-28 21:23:29,389 [INFO] Platforms loaded: Twitter, Facebook, LinkedIn, Instagram, Reddit, Email-Newsletter
+2025-10-28 21:23:29,389 [INFO] 📄 Processing content item 1/1 (43 chars)
+2025-10-28 21:23:29,389 [INFO] ✅ Simulating distribution to Twitter: This is Jules-ready content for the agent.
+ …
+2025-10-28 21:23:29,390 [INFO] ✅ Simulating distribution to Facebook: This is Jules-ready content for the agent.
+ …
+2025-10-28 21:23:29,390 [INFO] ✅ Simulating distribution to LinkedIn: This is Jules-ready content for the agent.
+ …
+2025-10-28 21:23:29,390 [INFO] ✅ Simulating distribution to Instagram: This is Jules-ready content for the agent.
+ …
+2025-10-28 21:23:29,390 [INFO] ✅ Simulating distribution to Reddit: This is Jules-ready content for the agent.
+ …
+2025-10-28 21:23:29,390 [INFO] ✅ Simulating distribution to Email-Newsletter: This is Jules-ready content for the agent.
+ …
+2025-10-28 21:23:29,390 [INFO] Distribution run complete – see distribution.log for full history

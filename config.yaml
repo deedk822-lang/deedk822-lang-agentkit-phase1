@@ -1,4 +1,0 @@
-integrations:
-  mailchimp_api_key: "${MAILCHIMP_API_KEY}"   # set in .env
-  auto_refresh_tokens: true
-  max_audience_sync_per_hour: 10
