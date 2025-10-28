@@ -1,0 +1,112 @@
+# Keep the Redis deployment as it is our new message bus.
+---
+# DEPLOYMENT 1: The Project Manager Agent
+# This agent's only job is to break down high-level goals into specific tasks.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: project-manager-agent
+  namespace: pcp-prod
+spec:
+  replicas: 1 # Only one project manager to avoid duplicating task breakdown.
+  selector:
+    matchLabels:
+      app: project-manager-agent
+  template:
+    metadata:
+      labels:
+        app: project-manager-agent
+    spec:
+      serviceAccountName: pcp-ksa
+      containers:
+      - name: manager
+        image: gcr.io/placeholder-project/project-manager-agent:latest # New Image
+        env:
+        - name: REDIS_URL
+          value: "redis-service:6379"
+        # Mount secrets as before
+        volumeMounts:
+        - name: pcp-secrets-volume
+          mountPath: "/mnt/secrets"
+          readOnly: true
+      volumes:
+      - name: pcp-secrets-volume
+        csi: # Uses the same SecretProviderClass
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "pcp-gcp-secrets"
+---
+# DEPLOYMENT 2: The Specialist Agents
+# These are the "workers" that perform specific tasks.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specialist-agents
+  namespace: pcp-prod
+spec:
+  replicas: 3 # We can scale our workforce.
+  selector:
+    matchLabels:
+      app: specialist-agents
+  template:
+    metadata:
+      labels:
+        app: specialist-agents
+    spec:
+      serviceAccountName: pcp-ksa
+      containers:
+      - name: specialist
+        image: gcr.io/placeholder-project/specialist-agents:latest # New Image
+        env:
+        - name: REDIS_URL
+          value: "redis-service:6379"
+        volumeMounts:
+        - name: pcp-secrets-volume
+          mountPath: "/mnt/secrets"
+          readOnly: true
+      volumes:
+      - name: pcp-secrets-volume
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "pcp-gcp-secrets"
+---
+# DEPLOYMENT 3: The Auditor Agent
+# This agent passively listens to results and records them in the ledger.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auditor-agent
+  namespace: pcp-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auditor-agent
+  template:
+    metadata:
+      labels:
+        app: auditor-agent
+    spec:
+      serviceAccountName: pcp-ksa
+      containers:
+      - name: auditor
+        image: gcr.io/placeholder-project/auditor-agent:latest # New Image
+        env:
+        - name: REDIS_URL
+          value: "redis-service:6379"
+        volumeMounts:
+        - name: pcp-secrets-volume
+          mountPath: "/mnt/secrets"
+          readOnly: true
+      volumes:
+      - name: pcp-secrets-volume
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "pcp-gcp-secrets"
+
+# ... (The SecretProviderClass definition remains the same) ...

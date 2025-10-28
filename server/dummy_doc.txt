@@ -1,0 +1,3 @@
+START_CAMPAIGN: campaign_id=1234, budget=10000
+REFACTOR_CODE: target=billing_service, language=python
+PROVISION_INFRA: service=database, type=postgres

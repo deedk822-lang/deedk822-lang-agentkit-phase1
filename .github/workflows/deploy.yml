@@ -1,0 +1,68 @@
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  # This should be set in GitHub Secrets
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: pcp-cluster
+  GKE_REGION: us-central1
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: 'google-github-actions/auth@v1'
+      with:
+        # This should be set in GitHub Secrets
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: 'github-actions-deployer@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
+    - name: Set up Cloud SDK
+      uses: 'google-github-actions/setup-gcloud@v1'
+
+    - name: Configure Docker
+      run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }}
+
+    - name: Build and Push Project Manager Image
+      run: |-
+        docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/project-manager-agent:${{ github.sha }} -f server/agents/project_manager.Dockerfile .
+        docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/project-manager-agent:${{ github.sha }}
+
+    - name: Build and Push Specialist Agents Image
+      run: |-
+        docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/specialist-agents:${{ github.sha }} -f server/agents/specialist.Dockerfile .
+        docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/specialist-agents:${{ github.sha }}
+
+    - name: Build and Push Auditor Agent Image
+      run: |-
+        docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/auditor-agent:${{ github.sha }} -f server/agents/auditor.Dockerfile .
+        docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/auditor-agent:${{ github.sha }}
+
+    - name: Deploy to GKE
+      run: |-
+        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --region ${{ env.GKE_REGION }}
+
+        echo "Applying A2A Kubernetes manifests..."
+        # We re-apply the whole file which is safer for managing multiple deployments
+        kubectl apply -f k8s/gcp-deployment.yml
+
+        echo "Updating GKE Deployments with new image tags..."
+        kubectl set image deployment/project-manager-agent manager=${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/project-manager-agent:${{ github.sha }} -n pcp-prod
+        kubectl set image deployment/specialist-agents specialist=${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/specialist-agents:${{ github.sha }} -n pcp-prod
+        kubectl set image deployment/auditor-agent auditor=${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/pcp/auditor-agent:${{ github.sha }} -n pcp-prod

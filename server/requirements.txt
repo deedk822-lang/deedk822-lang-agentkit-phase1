@@ -1,0 +1,7 @@
+Flask
+gunicorn
+requests
+redis
+pyyaml
+cerberus
+pytest
