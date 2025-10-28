@@ -18,3 +18,14 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ZlqlqMORGxqxJ2KhfsRwjD
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## 🔄 Integration-Lifecycle Commands (new)
+
+| Command | Example | Autonomy |
+|---|---|---|
+| `CHECK_INTEGRATION_STATUS service=meta_lead_ads` | Low | ✅ instant |
+| `REFRESH_TOKEN service=zapier` | Medium | ⚠️ judge approval |
+| `CONNECT_INTEGRATION service=squarespace` | High | 🚫 blocked – opens ticket |
+| `SYNC_AUDIENCE audience_id=abc123 dest=meta` | Medium | ⚠️ judge approval |
+
+> The agent now **manages** integrations, not merely **pushes** content.
