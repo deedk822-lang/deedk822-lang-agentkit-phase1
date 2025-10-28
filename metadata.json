@@ -1,0 +1,7 @@
+{
+  "name": "Production Control Plane Dashboard",
+  "description": "A unified dashboard for monitoring and interacting with the Production Control Plane (PCP), enhanced with Gemini AI for intelligent analysis, command generation, chat assistance, and live audio transcription.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
