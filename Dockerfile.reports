@@ -16,8 +16,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agents/report_generator.py ./agents/
-COPY agents/__init__.py ./agents/
+COPY agents/ ./agents/
 COPY config.yaml .
 
 # Create reports directory

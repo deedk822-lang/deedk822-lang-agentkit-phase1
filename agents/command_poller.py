@@ -28,7 +28,7 @@ CFG_PATH = pathlib.Path(__file__).parents[1] / "config.yaml"
 CFG = yaml.safe_load(CFG_PATH.read_text())["command_poller"]
 
 # ---------- Redis ----------
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ---------- schemas ----------
