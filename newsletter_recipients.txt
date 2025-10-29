@@ -1,0 +1,7 @@
+# Email addresses for newsletter distribution
+# Add one email per line
+# Example:
+# user@example.com
+# admin@company.com
+
+test@example.com
