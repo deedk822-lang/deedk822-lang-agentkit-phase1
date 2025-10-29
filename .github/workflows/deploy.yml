@@ -1,4 +1,4 @@
-name: Build-Push-Deploy
+name: Build-Only-Workflow
 
 on:
   push:
@@ -6,19 +6,18 @@ on:
   workflow_dispatch:
 
 env:
-  GCP_PROJECT:   ${{ secrets.GCP_PROJECT_ID }}
-  REGISTRY:      gcr.io/${{ secrets.GCP_PROJECT_ID }}
+  # Simplified registry name since we are only building locally in the runner
+  LOCAL_REGISTRY: local-agentkit-registry
 
 jobs:
   build-and-validate:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -27,36 +26,36 @@ jobs:
         run: |
           echo "Building Command Poller agent..."
           docker build -f Dockerfile.poller \
-                       -t ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} .
-          docker tag ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} \
-                     ${{ env.REGISTRY }}/agentkit-command-poller:latest
+                       -t ${{ env.LOCAL_REGISTRY }}/agentkit-command-poller:${{ github.sha }} .
+          docker tag ${{ env.LOCAL_REGISTRY }}/agentkit-command-poller:${{ github.sha }} \
+                     ${{ env.LOCAL_REGISTRY }}/agentkit-command-poller:latest
           echo "Command Poller build successful"
 
       - name: Build Content Distribution Image
         run: |
           echo "Building Content Distribution agent..."
           docker build -f Dockerfile.distributor \
-                       -t ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} .
-          docker tag ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} \
-                     ${{ env.REGISTRY }}/agentkit-content-distribution:latest
+                       -t ${{ env.LOCAL_REGISTRY }}/agentkit-content-distribution:${{ github.sha }} .
+          docker tag ${{ env.LOCAL_REGISTRY }}/agentkit-content-distribution:${{ github.sha }} \
+                     ${{ env.LOCAL_REGISTRY }}/agentkit-content-distribution:latest
           echo "Content Distribution build successful"
 
       - name: Build Site Scanner Image
         run: |
           echo "Building Site Scanner agent..."
           docker build -f Dockerfile.scanner \
-                       -t ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} .
-          docker tag ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} \
-                     ${{ env.REGISTRY }}/agentkit-site-scanner:latest
+                       -t ${{ env.LOCAL_REGISTRY }}/agentkit-site-scanner:${{ github.sha }} .
+          docker tag ${{ env.LOCAL_REGISTRY }}/agentkit-site-scanner:${{ github.sha }} \
+                     ${{ env.LOCAL_REGISTRY }}/agentkit-site-scanner:latest
           echo "Site Scanner build successful"
 
       - name: Build Report Generator Image
         run: |
           echo "Building Report Generator agent..."
           docker build -f Dockerfile.reports \
-                       -t ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} .
-          docker tag ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} \
-                     ${{ env.REGISTRY }}/agentkit-report-generator:latest
+                       -t ${{ env.LOCAL_REGISTRY }}/agentkit-report-generator:${{ github.sha }} .
+          docker tag ${{ env.LOCAL_REGISTRY }}/agentkit-report-generator:${{ github.sha }} \
+                     ${{ env.LOCAL_REGISTRY }}/agentkit-report-generator:latest
           echo "Report Generator build successful"
 
       - name: Validate Docker Images
@@ -66,65 +65,16 @@ jobs:
           echo ""
           echo "All 4 agent images built successfully!"
 
-      # ---------- Optional summary ----------
+      # ---------- Final Summary ----------
       - name: Build Summary
         run: |
           echo ""
           echo "🎉 BUILD SUCCESSFUL – All agents ready!"
+          echo "Deployment steps have been removed as requested."
           echo ""
-          echo "📦 Images built:"
+          echo "📦 Images built and tagged locally:"
           echo "  • Command Poller"
           echo "  • Content Distribution"
           echo "  • Site Scanner"
           echo "  • Report Generator"
           echo ""
-
-  deploy-to-gcp:
-    runs-on: ubuntu-latest
-    needs: build-and-validate
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker
-
-      - name: Push all images to GCR
-        run: |
-          docker push ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }}
-
-      - uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
-          location: ${{ secrets.GKE_CLUSTER_ZONE }}
-
-      - name: Deploy to GKE
-        run: |
-          export GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
-          envsubst < k8s/gcp-deployment.yml | kubectl apply -f -
-          kubectl set image deployment/command-poller      poller=${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}          -n agentkit
-          kubectl set image deployment/content-distribution distributor=${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} -n agentkit
-          kubectl set image deployment/site-scanner        scanner=${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }}            -n agentkit
-          kubectl set image deployment/report-generator    generator=${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }}      -n agentkit
-          kubectl rollout status deployment/command-poller      -n agentkit
-          kubectl rollout status deployment/content-distribution -n agentkit
-          kubectl rollout status deployment/site-scanner        -n agentkit
-          kubectl rollout status deployment/report-generator    -n agentkit
-
-      - name: Verify Deployment
-        run: |
-          kubectl get pods    -n agentkit
-          kubectl get services -n agentkit
