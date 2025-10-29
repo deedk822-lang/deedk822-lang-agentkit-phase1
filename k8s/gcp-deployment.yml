@@ -1,7 +1,124 @@
+# Complete GKE Deployment for AgentKit Phase-1
+# This file should replace your current k8s/gcp-deployment.yml
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentkit
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: agentkit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: agentkit
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+
+---
+# Secret for API Keys (you'll need to create this separately)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentkit-secrets
+  namespace: agentkit
+type: Opaque
+stringData:
+  REDIS_URL: "redis://redis:6379/0"
+  # Add your API keys here or create via kubectl
+  # GOOGLE_DOC_ID: ""
+  # GOOGLE_CREDENTIALS_JSON: ""
+  # TWITTER_API_KEY: ""
+  # etc.
+
+---
+# Command Poller Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-poller
+  namespace: agentkit
+  labels:
+    app: command-poller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: command-poller
+  template:
+    metadata:
+      labels:
+        app: command-poller
+    spec:
+      containers:
+      - name: poller
+        image: gcr.io/${GCP_PROJECT_ID}/agentkit-command-poller:latest
+        envFrom:
+        - secretRef:
+            name: agentkit-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+---
+# Content Distribution Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: content-distribution
+  namespace: agentkit
+  labels:
+    app: content-distribution
 spec:
   replicas: 1
   selector:
@@ -13,19 +130,105 @@ spec:
         app: content-distribution
     spec:
       containers:
-      - name: content-distribution
-        image: gcr.io/your-project-id/agentkit-content-distribution:latest
-        env:
-        - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /var/run/secrets/google/service-account.json
-        volumeMounts:
-        - name: ayrshare-secret
-          mountPath: /secrets
-          readOnly: true
-      volumes:
-      - name: ayrshare-secret
-        csi:
-          driver: secrets-store.csi.k8s.io
-          readOnly: true
-          volumeAttributes:
-            secretProviderClass: ayrshare-spc
+      - name: distributor
+        image: gcr.io/${GCP_PROJECT_ID}/agentkit-content-distribution:latest
+        envFrom:
+        - secretRef:
+            name: agentkit-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+---
+# Site Scanner Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: site-scanner
+  namespace: agentkit
+  labels:
+    app: site-scanner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: site-scanner
+  template:
+    metadata:
+      labels:
+        app: site-scanner
+    spec:
+      containers:
+      - name: scanner
+        image: gcr.io/${GCP_PROJECT_ID}/agentkit-site-scanner:latest
+        envFrom:
+        - secretRef:
+            name: agentkit-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+---
+# Report Generator Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-generator
+  namespace: agentkit
+  labels:
+    app: report-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-generator
+  template:
+    metadata:
+      labels:
+        app: report-generator
+    spec:
+      containers:
+      - name: generator
+        image: gcr.io/${GCP_PROJECT_ID}/agentkit-report-generator:latest
+        envFrom:
+        - secretRef:
+            name: agentkit-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"
+          initialDelaySeconds: 30
+          periodSeconds: 30
