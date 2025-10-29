@@ -16,8 +16,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agents/ ./agents/
-COPY config.yaml .
+COPY . /app/
 
 # Create reports directory
 RUN mkdir -p reports
