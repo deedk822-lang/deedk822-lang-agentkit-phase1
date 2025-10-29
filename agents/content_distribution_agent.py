@@ -28,7 +28,7 @@ config_path = pathlib.Path(__file__).parent.parent / "config.yaml"
 PLATFORMS = yaml.safe_load(config_path.read_text())["content_distribution"]["platforms"]
 
 # ---------- Redis ----------
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
 class TwitterClient:
