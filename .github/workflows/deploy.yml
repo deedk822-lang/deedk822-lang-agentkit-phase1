@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# REMOVED: env block that set REGISTRY globally, as it was evaluated too early
+ REMOVED: env block that set REGISTRY globally, as it was evaluated too early
 
 jobs:
   build-and-validate:
@@ -18,15 +18,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set Lowercase Project ID
-        # This step correctly sets REGISTRY_PROJECT_ID in the GITHUB_ENV file
+      This step correctly sets REGISTRY_PROJECT_ID in the GITHUB_ENV file
         run: echo "REGISTRY_PROJECT_ID=$(echo ${{ secrets.GCP_PROJECT_ID }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
         
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ---------- Build & tag all 4 images ----------
+       Build & tag all 4 images 
       - name: Build Command Poller Image
-        # The REGISTRY environment variable is now constructed here, *after* REGISTRY_PROJECT_ID is set
+         REGISTRY environment variable is now constructed here, *after* REGISTRY_PROJECT_ID is set
         env:
           REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Re-set the lowercase project ID for the deploy job
+      Re-set the lowercase project ID for the deploy job
       - name: Set Lowercase Project ID for Deployment
         run: echo "REGISTRY_PROJECT_ID=$(echo ${{ secrets.GCP_PROJECT_ID }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       
