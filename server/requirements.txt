@@ -1,0 +1,6 @@
+# ---------- SHARED BY BOTH AGENTS (copied into Docker images) ----------
+pyyaml>=6.0
+requests>=2.31
+cerberus>=1.3
+redis>=5.0
+python-dotenv>=1.0          # allows local .env files
