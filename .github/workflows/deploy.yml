@@ -68,52 +68,5 @@ jobs:
           echo "  • Report Generator"
           echo ""
           echo "ℹ️  Note: GCP deployment is disabled."
-          echo "   To enable, configure GCP secrets."
+          echo "   To enable, configure GCP secrets and add deploy-to-gcp job."
           echo ""
-
-  deploy-to-gcp:
-    runs-on: ubuntu-latest
-    needs: build-and-validate
-    if: secrets.WIF_PROVIDER != '' && secrets.GCP_PROJECT_ID != '' 
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker
-      - name: Build and Push All Agent Images
-        run: |
-          docker build -f Dockerfile.poller -t ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} .
-          docker push ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}
-          docker build -f Dockerfile.distributor -t ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} .
-          docker push ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }}
-          docker build -f Dockerfile.scanner -t ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} .
-          docker push ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }}
-          docker build -f Dockerfile.reports -t ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} .
-          docker push ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }}
-      - uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
-          location: ${{ secrets.GKE_CLUSTER_ZONE }}
-      - name: Deploy to GKE
-        run: |
-          envsubst < k8s/gcp-deployment.yml | kubectl apply -f -
-          kubectl set image deployment/command-poller poller=${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} -n agentkit
-          kubectl set image deployment/content-distribution distributor=${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} -n agentkit
-          kubectl set image deployment/site-scanner scanner=${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} -n agentkit
-          kubectl set image deployment/report-generator generator=${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} -n agentkit
-          kubectl rollout status deployment/command-poller -n agentkit
-          kubectl rollout status deployment/content-distribution -n agentkit
-          kubectl rollout status deployment/site-scanner -n agentkit
-          kubectl rollout status deployment/report-generator -n agentkit
-      - name: Verify Deployment
-        run: |
-          kubectl get pods -n agentkit
-          kubectl get services -n agentkit
