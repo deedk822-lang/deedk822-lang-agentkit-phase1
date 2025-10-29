@@ -1,9 +1,16 @@
-#!/usr/bin/env bash
-set -euo pipefail
-echo "🐍  Creating venv …"
-python3 -m venv venv
+#!/bin/bash
+
+# Create a virtual environment
+python -m venv venv
 source venv/bin/activate
-echo "📦  Installing packages …"
-pip install -U pip wheel
+
+# Install dependencies
 pip install -r requirements.txt
-echo "✅  Done.  Run: source venv/bin/activate"
+
+# Set up environment variables
+cp .env.template .env
+
+# Start Redis
+docker run --rm -d -p 6379:6379 redis:7-alpine
+
+echo "Setup complete. Run the agent with: python agents/content_distribution_agent.py --content content.txt"
