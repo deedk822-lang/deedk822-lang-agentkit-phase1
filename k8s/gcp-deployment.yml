@@ -1,0 +1,96 @@
+# Replace YOUR_GCP_PROJECT with real project ID
+apiVersion: v1
+kind: Namespace
+metadata: {name: agentkit}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentkit-secrets
+  namespace: agentkit
+type: Opaque
+stringData:
+  GOOGLE_DOC_ID: "1aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890"
+  NOTION_TOKEN: "secret_YOUR_NOTION_TOKEN"
+  PRIVATE_KEY: "secret_YOUR_PRIVATE_KEY"
+---
+# Redis (A2A bus)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: agentkit
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: redis}
+  template:
+    metadata:
+      labels: {app: redis}
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports: [{containerPort: 6379}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: agentkit
+spec:
+  selector: {app: redis}
+  ports: [{port: 6379, targetPort: 6379}]
+---
+# Command-Poller agent
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-poller
+  namespace: agentkit
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: command-poller}
+  template:
+    metadata:
+      labels: {app: command-poller}
+    spec:
+      containers:
+      - name: poller
+        image: gcr.io/YOUR_GCP_PROJECT/agentkit-command-poller:latest
+        imagePullPolicy: Always
+        env:
+        - name: REDIS_URL
+          value: "redis-service:6379"
+        - name: GOOGLE_DOC_ID
+          valueFrom:
+            secretKeyRef: {name: agentkit-secrets, key: GOOGLE_DOC_ID}
+        - name: NOTION_TOKEN
+          valueFrom:
+            secretKeyRef: {name: agentkit-secrets, key: NOTION_TOKEN}
+        - name: PRIVATE_KEY
+          valueFrom:
+            secretKeyRef: {name: agentkit-secrets, key: PRIVATE_KEY}
+---
+# Content-Distribution agent
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-distribution
+  namespace: agentkit
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: content-distribution}
+  template:
+    metadata:
+      labels: {app: content-distribution}
+    spec:
+      containers:
+      - name: distributor
+        image: gcr.io/YOUR_GCP_PROJECT/agentkit-content-distribution:latest
+        imagePullPolicy: Always
+        env:
+        - name: REDIS_URL
+          value: "redis-service:6379"
