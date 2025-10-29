@@ -21,7 +21,7 @@ LOG = logging.getLogger("AppsAgent")
 LOG.setLevel(logging.INFO)
 LOG.addHandler(logging.StreamHandler())
 LOG.addHandler(RotatingFileHandler(
-"distribution.log", maxBytes=5*1024*1024, backupCount=5, encoding="utf-8"))
+    "distribution.log", maxBytes=5*1024*1024, backupCount=5, encoding="utf-8"))
 
 # Track sent posts to avoid duplicates
 LEDGER = pathlib.Path("sent.json")
@@ -32,7 +32,6 @@ class Post:
     text: str
     media: List[pathlib.Path]
 
-# --- Google ADC Setup ---
 def _google_creds() -> tuple:
     """Fetch Google Application Default Credentials (ADC)."""
     import google.auth
@@ -47,7 +46,6 @@ def _google_creds() -> tuple:
     )
     return creds, project
 
-# --- Discover Available Google Services ---
 def _discover_services(creds) -> Dict[str, bool]:
     """Detect which Google services are available and accessible."""
     from googleapiclient.discovery import build
@@ -88,7 +86,6 @@ def _discover_services(creds) -> Dict[str, bool]:
     LOG.info("Discovered Google services: %s", [k for k, v in services.items() if v])
     return services
 
-# --- Smart Channel Selection ---
 def _choose_channel(services: Dict[str, bool], post: Post) -> str:
     """Select the best channel for the post based on content and available services."""
     if services.get("GoogleBusiness") and len(post.text) < 1500:
@@ -99,9 +96,8 @@ def _choose_channel(services: Dict[str, bool], post: Post) -> str:
         return "Calendar"
     if services.get("Gmail"):
         return "Gmail"
-    return "AyrShare" # Fallback
+    return "AyrShare"  # Fallback
 
-# --- Channel-Specific Posting Logic ---
 def _send_gmail(creds, post: Post) -> str:
     """Post to Gmail."""
     from googleapiclient.discovery import build
@@ -110,8 +106,8 @@ def _send_gmail(creds, post: Post) -> str:
 
     gmail = build("gmail", "v1", credentials=creds)
     msg = MIMEText(post.text)
-    msg["To"] = os.getenv("FALLBACK_EMAIL", "you@yourdomain.com")
-    msg["From"] = "agent@yourdomain.com"
+    msg["To"] = os.getenv("FALLBACK_EMAIL", "user@example.com")
+    msg["From"] = "agent@example.com"
     msg["Subject"] = "Agent Update"
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     result = gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
@@ -172,7 +168,6 @@ def _send_ayrshare(api_key: str, post: Post) -> str:
     response.raise_for_status()
     return f"ayr-{response.json().get('id', 'ok')}"
 
-# --- Load Content ---
 def load_content(source: str) -> List[Post]:
     """Load posts from a file or directory."""
     src = pathlib.Path(source)
@@ -197,13 +192,11 @@ def load_content(source: str) -> List[Post]:
     LOG.info("Loaded %d posts from %s", len(posts), src)
     return posts
 
-# --- Update Ledger ---
 def _update_ledger(post_id: str) -> None:
     """Track sent posts to avoid duplicates."""
     SENT_CACHE.add(post_id)
     LEDGER.write_text(json.dumps(list(SENT_CACHE)))
 
-# --- Main Workflow ---
 def main():
     parser = argparse.ArgumentParser(description="Google-Apps-Aware Distribution Agent")
     parser.add_argument("--content", required=True, help="File or directory with content")
@@ -253,7 +246,7 @@ def main():
                 url = _send_youtube(creds, post)
             elif channel == "Calendar":
                 url = _send_calendar(creds, post)
-            else: # Fallback to AyrShare
+            else:  # Fallback to AyrShare
                 if not ayr_key:
                     raise RuntimeError("No AyrShare key and no suitable Google channel")
                 url = _send_ayrshare(ayr_key, post)
