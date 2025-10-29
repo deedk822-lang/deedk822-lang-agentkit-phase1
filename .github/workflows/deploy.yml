@@ -1,14 +1,8 @@
 name: Build-Push-Deploy
 
-# Temporarily disabled - uncomment 'on:' section when GCP secrets are configured
-# on:
-#   push:
-#     branches: [main]
-
-# To enable: 
-# 1. Set up Workload Identity Federation in GCP
-# 2. Add secrets: GCP_PROJECT, WIF_PROVIDER
-# 3. Uncomment the 'on:' section above
+on:
+  push:
+    branches: [main]
 
 env:
   GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
