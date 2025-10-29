@@ -1,3 +1,8 @@
+command_poller:
+  interval_seconds: 10
+  redis_channel: "agent_commands"
+  command_file: "command_queue.txt"
+
 content_distribution:
   platforms:
     - Gmail
