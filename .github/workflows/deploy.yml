@@ -5,9 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  GCP_PROJECT:   ${{ secrets.GCP_PROJECT_ID }}
-  REGISTRY:      gcr.io/${{ secrets.GCP_PROJECT_ID }}
+# REMOVED: env block that set REGISTRY globally, as it was evaluated too early
 
 jobs:
   build-and-validate:
@@ -19,11 +17,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set Lowercase Project ID
+        # This step correctly sets REGISTRY_PROJECT_ID in the GITHUB_ENV file
+        run: echo "REGISTRY_PROJECT_ID=$(echo ${{ secrets.GCP_PROJECT_ID }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       # ---------- Build & tag all 4 images ----------
       - name: Build Command Poller Image
+        # The REGISTRY environment variable is now constructed here, *after* REGISTRY_PROJECT_ID is set
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
           echo "Building Command Poller agent..."
           docker build -f Dockerfile.poller \
@@ -33,6 +38,8 @@ jobs:
           echo "Command Poller build successful"
 
       - name: Build Content Distribution Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
           echo "Building Content Distribution agent..."
           docker build -f Dockerfile.distributor \
@@ -42,6 +49,8 @@ jobs:
           echo "Content Distribution build successful"
 
       - name: Build Site Scanner Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
           echo "Building Site Scanner agent..."
           docker build -f Dockerfile.scanner \
@@ -51,6 +60,8 @@ jobs:
           echo "Site Scanner build successful"
 
       - name: Build Report Generator Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
           echo "Building Report Generator agent..."
           docker build -f Dockerfile.reports \
@@ -66,7 +77,6 @@ jobs:
           echo ""
           echo "All 4 agent images built successfully!"
 
-      # ---------- Optional summary ----------
       - name: Build Summary
         run: |
           echo ""
@@ -88,6 +98,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Re-set the lowercase project ID for the deploy job
+      - name: Set Lowercase Project ID for Deployment
+        run: echo "REGISTRY_PROJECT_ID=$(echo ${{ secrets.GCP_PROJECT_ID }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -100,6 +114,8 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Push all images to GCR
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
           docker push ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }}
@@ -112,6 +128,8 @@ jobs:
           location: ${{ secrets.GKE_CLUSTER_ZONE }}
 
       - name: Deploy to GKE
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
         run: |
           export GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           envsubst < k8s/gcp-deployment.yml | kubectl apply -f -
