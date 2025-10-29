@@ -1,0 +1,17 @@
+command_poller:
+  google_doc_id: "1aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890"
+  mcp_base_url: "http://localhost:8080/mcp/v1"
+  notion:
+    token: "secret_YOUR_NOTION_TOKEN"
+    database_id: "dummy_db_id"
+  private_key: "secret_YOUR_PRIVATE_KEY"
+  kill_switch_key: "agentkit_kill_switch"
+
+content_distribution:
+  platforms:
+    - Twitter
+    - LinkedIn
+    - Facebook
+    - Instagram
+    - Reddit
+    - Email Newsletter
