@@ -3,72 +3,116 @@ name: Build-Push-Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
   REGISTRY: gcr.io/${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  build-and-deploy:
+  build-and-validate:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Command Poller Image
+        run: |
+          echo "Building Command Poller agent..."
+          docker build -f Dockerfile.poller -t agentkit-command-poller:${{ github.sha }} .
+          docker tag agentkit-command-poller:${{ github.sha }} agentkit-command-poller:latest
+          echo "✅ Command Poller build successful"
+
+      - name: Build Content Distribution Image
+        run: |
+          echo "Building Content Distribution agent..."
+          docker build -f Dockerfile.distributor -t agentkit-content-distribution:${{ github.sha }} .
+          docker tag agentkit-content-distribution:${{ github.sha }} agentkit-content-distribution:latest
+          echo "✅ Content Distribution build successful"
+
+      - name: Build Site Scanner Image
+        run: |
+          echo "Building Site Scanner agent..."
+          docker build -f Dockerfile.scanner -t agentkit-site-scanner:${{ github.sha }} .
+          docker tag agentkit-site-scanner:${{ github.sha }} agentkit-site-scanner:latest
+          echo "✅ Site Scanner build successful"
+
+      - name: Build Report Generator Image
+        run: |
+          echo "Building Report Generator agent..."
+          docker build -f Dockerfile.reports -t agentkit-report-generator:${{ github.sha }} .
+          docker tag agentkit-report-generator:${{ github.sha }} agentkit-report-generator:latest
+          echo "✅ Report Generator build successful"
+
+      - name: Validate Docker Images
+        run: |
+          echo "Validating all Docker images..."
+          docker images | grep agentkit
+          echo ""
+
+      - name: Build Summary
+        run: |
+          echo "================================================"
+          echo "================================================"
+          echo ""
+          echo "📦 Images built:"
+          echo "  • Command Poller"
+          echo "  • Content Distribution"
+          echo "  • Site Scanner"
+          echo "  • Report Generator"
+          echo ""
+          echo "ℹ️  Note: GCP deployment is disabled."
+          echo "   To enable, configure GCP secrets."
+          echo ""
+
+  deploy-to-gcp:
+    runs-on: ubuntu-latest
+    needs: build-and-validate
+    if: ${{ secrets.WIF_PROVIDER != '' && secrets.GCP_PROJECT_ID != '' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-
       - uses: google-github-actions/setup-gcloud@v2
-        
       - name: Configure Docker for GCR
-        run: |
-          gcloud auth configure-docker
-
+        run: gcloud auth configure-docker
       - name: Build and Push All Agent Images
         run: |
-          # Command Poller
           docker build -f Dockerfile.poller -t ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} .
           docker push ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}
-          
-          # Content Distribution
           docker build -f Dockerfile.distributor -t ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} .
           docker push ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }}
-          
-          # Site Scanner
           docker build -f Dockerfile.scanner -t ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} .
           docker push ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }}
-          
-          # Report Generator
           docker build -f Dockerfile.reports -t ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} .
           docker push ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }}
-
       - uses: google-github-actions/get-gke-credentials@v2
         with:
           cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
           location: ${{ secrets.GKE_CLUSTER_ZONE }}
-
       - name: Deploy to GKE
         run: |
-          # Substitute environment variables in deployment manifest
           envsubst < k8s/gcp-deployment.yml | kubectl apply -f -
-          
-          # Update image versions
           kubectl set image deployment/command-poller poller=${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} -n agentkit
           kubectl set image deployment/content-distribution distributor=${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} -n agentkit
           kubectl set image deployment/site-scanner scanner=${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} -n agentkit
           kubectl set image deployment/report-generator generator=${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} -n agentkit
-          
-          # Wait for rollout
           kubectl rollout status deployment/command-poller -n agentkit
           kubectl rollout status deployment/content-distribution -n agentkit
           kubectl rollout status deployment/site-scanner -n agentkit
           kubectl rollout status deployment/report-generator -n agentkit
-
       - name: Verify Deployment
         run: |
           kubectl get pods -n agentkit
