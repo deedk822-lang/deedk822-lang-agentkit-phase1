@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
 """
-Content-Distribution Agent – canvas-final version
-------------------------------------------------------------
-• JSON config for platforms (easy Jules-edit)
-• Loads *either* a single file or **whole directory** of content
-• Rotating file-logger + console logger
-• Safe error handling everywhere
-• argparse CLI so Jules can do:
-    python agent.py --content ./posts/  --config jules-config.json
+Enhanced Content-Distribution Agent – Full-Cycle Integration-Lifecycle Version
+------------------------------------------------------------------------------
+• JSON config now a dict for platform-specific settings (e.g., API keys)
+• Loads single file or whole directory of content (encourage dir mode for batch!)
+• True rotating file-logger + console
+• Real integrations for X and Email; simulation for others (extend easily)
+• Content validation (e.g., length limits)
+• Retries on send failures
+• Safe error handling; argparse CLI unchanged
 """
 import argparse
 import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 # ----------  logging  ----------
+from logging.handlers import RotatingFileHandler
 LOG = logging.getLogger("DistributionAgent")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler(),
-              logging.FileHandler("distribution.log", encoding="utf-8")]
+              RotatingFileHandler("distribution.log", maxBytes=5*1024*1024, backupCount=5, encoding="utf-8")]
 )
 
 # ----------  core agent  ----------
 class ContentDistributionAgent:
     def __init__(self, config_path: str = "config.json"):
         self.config_path = config_path
+        self.platform_configs: Dict[str, Dict] = {}
         self.platforms: List[str] = []
         self._load_config()
 
@@ -38,22 +42,24 @@ class ContentDistributionAgent:
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-            self.platforms = cfg.get("platforms", [])
-            if not isinstance(self.platforms, list):
-                raise ValueError("'platforms' must be a JSON list")
+            self.platform_configs = cfg.get("platforms", {})
+            if not isinstance(self.platform_configs, dict):
+                raise ValueError("'platforms' must be a JSON object (dict)")
+            self.platforms = list(self.platform_configs.keys())
             LOG.info("Platforms loaded: %s", ", ".join(self.platforms))
         except FileNotFoundError:
             LOG.error("Config file %s not found – using empty platform list", self.config_path)
-            self.platforms = []
+            self.platform_configs = {}
         except Exception as e:
             LOG.error("Bad config file %s: %s", self.config_path, e)
-            self.platforms = []
+            self.platform_configs = {}
 
     # -------------  content  -------------
     def load_content(self, source: str) -> List[str]:
         """
         If *source* is a file → return [its text].
         If *source* is a dir → return [text of each .txt file], sorted.
+        TIP: Use directory mode for batch distribution to maximize capacity!
         """
         src = Path(source)
         if not src.exists():
@@ -92,23 +98,76 @@ class ContentDistributionAgent:
         for idx, content in enumerate(contents, 1):
             LOG.info("📄 Processing content item %d/%d (%d chars)", idx, len(contents), len(content))
             for platform in self.platforms:
+                config = self.platform_configs.get(platform, {})
                 try:
-                    self._send_to_platform(platform, content)
+                    self._send_to_platform(platform, content, config)
                 except Exception as e:
                     LOG.error("Failed to distribute to %s: %s", platform, e)
 
-    def _send_to_platform(self, platform: str, content: str) -> None:
+    def _send_to_platform(self, platform: str, content: str, config: Dict) -> None:
         """
-        Replace this with real API calls (Tweepy, FB-SDK, etc.).
-        For Phase-1 we just *simulate*.
+        Real API calls for supported platforms; simulation for others.
+        Includes validation, retries. Extend for media by adding file params.
+        TODO: For lifecycle tracking, append sent info to a 'sent.json' file.
         """
-        LOG.info("✅ Simulating distribution to %s: %.60s …", platform, content)
-        # TODO: plug real APIs here
-        print(f"   📤  {platform}: {content[:50]}...")
+        if not config:
+            LOG.warning("No config for %s – skipping", platform)
+            return
+
+        # Platform-specific validation
+        if platform == "X":
+            if len(content) > 280:
+                content = content[:277] + "..."  # Truncate to fit
+                LOG.warning("Truncated content for X to 280 chars")
+
+        # Retry wrapper
+        for attempt in range(1, 4):  # Up to 3 attempts
+            try:
+                if platform == "X":
+                    import tweepy
+                    client = tweepy.Client(
+                        consumer_key=config.get('consumer_key', ''),
+                        consumer_secret=config.get('consumer_secret', ''),
+                        access_token=config.get('access_token', ''),
+                        access_token_secret=config.get('access_token_secret', '')
+                    )
+                    response = client.create_tweet(text=content)
+                    LOG.info("✅ Posted to X: tweet ID %s", response.data['id'])
+                    return  # Success
+
+                elif platform == "Email-Newsletter":
+                    import smtplib
+                    from email.mime.text import MIMEText
+                    msg = MIMEText(content)
+                    msg['Subject'] = config.get('subject', 'Newsletter Update')
+                    msg['From'] = config.get('from_email', '')
+                    msg['To'] = ", ".join(config.get('recipients', []))
+                    server = smtplib.SMTP(config.get('smtp_server', ''), config.get('smtp_port', 587))
+                    server.starttls()
+                    server.login(config.get('username', ''), config.get('password', ''))
+                    recipients = config.get('recipients', [])
+                    if recipients:
+                        server.sendmail(msg['From'], recipients, msg.as_string())
+                        LOG.info("✅ Sent email newsletter to %d recipients", len(recipients))
+                    else:
+                        LOG.warning("No recipients configured for Email-Newsletter")
+                    server.quit()
+                    return  # Success
+
+                else:
+                    # Simulation for others (extend here, e.g., for Facebook use facebook-sdk)
+                    LOG.info("✅ Simulating distribution to %s: %.60s …", platform, content)
+                    return  # Simulate success
+
+            except Exception as e:
+                LOG.warning("Attempt %d failed for %s: %s", attempt, platform, e)
+                if attempt == 3:
+                    raise  # Final failure
+                time.sleep(2 ** attempt)  # Exponential backoff
 
 # ----------  CLI entry  ----------
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Content-Distribution Agent")
+    parser = argparse.ArgumentParser(description="Enhanced Content-Distribution Agent")
     parser.add_argument("--content", default="content.txt",
                         help="File or directory with content (default: content.txt)")
     parser.add_argument("--config", default="config.json",
