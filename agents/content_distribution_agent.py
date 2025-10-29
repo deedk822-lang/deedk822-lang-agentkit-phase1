@@ -149,13 +149,21 @@ def _send_calendar(creds, post: Post) -> str:
     result = cal.events().quickAdd(calendarId="primary", text=post.text).execute()
     return f"cal-{result['id']}"
 
-def _send_ayrshare(api_key: str, post: Post) -> str:
+def _send_ayrshare(api_key: str, post: Post, platforms: Optional[Dict[str, bool]] = None) -> str:
     """Fallback: Post via AyrShare."""
     import requests
 
+    if platforms:
+        enabled_platforms = [
+            platform.lower() for platform, enabled in platforms.items()
+            if enabled and platform not in ["GoogleBusiness", "YouTube", "Calendar", "Gmail"]
+        ]
+    else:
+        enabled_platforms = ["twitter", "linkedin", "facebook", "instagram"]
+
     payload = {
         "post": post.text,
-        "platforms": ["twitter", "linkedin", "facebook", "instagram"]
+        "platforms": enabled_platforms
     }
     if post.media:
         payload["mediaUrls"] = [str(m) for m in post.media]
