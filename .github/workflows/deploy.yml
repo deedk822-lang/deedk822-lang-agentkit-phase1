@@ -5,12 +5,11 @@ on:
     branches: [main]
 
 env:
-  GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
-  IMAGE_POLLER:  gcr.io/${{ secrets.GCP_PROJECT }}/agentkit-command-poller
-  IMAGE_DISTRIB: gcr.io/${{ secrets.GCP_PROJECT }}/agentkit-content-distribution
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+  REGISTRY: gcr.io/${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  pipeline:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,22 +21,55 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: github-actions@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
+        
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+
+      - name: Build and Push All Agent Images
+        run: |
+          # Command Poller
+          docker build -f Dockerfile.poller -t ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} .
+          docker push ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}
+          
+          # Content Distribution
+          docker build -f Dockerfile.distributor -t ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} .
+          docker push ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }}
+          
+          # Site Scanner
+          docker build -f Dockerfile.scanner -t ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} .
+          docker push ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }}
+          
+          # Report Generator
+          docker build -f Dockerfile.reports -t ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} .
+          docker push ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }}
+
       - uses: google-github-actions/get-gke-credentials@v2
         with:
-          cluster_name: agentkit-cluster
-          location: us-central1
+          cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
+          location: ${{ secrets.GKE_CLUSTER_ZONE }}
 
-      - name: Build & Push images
+      - name: Deploy to GKE
         run: |
-          docker build -f Dockerfile.poller      -t ${{ env.IMAGE_POLLER }}:${{ github.sha }} .
-          docker build -f Dockerfile.distributor -t ${{ env.IMAGE_DISTRIB }}:${{ github.sha }} .
-          docker push ${{ env.IMAGE_POLLER }}:${{ github.sha }}
-          docker push ${{ env.IMAGE_DISTRIB }}:${{ github.sha }}
+          # Substitute environment variables in deployment manifest
+          envsubst < k8s/gcp-deployment.yml | kubectl apply -f -
+          
+          # Update image versions
+          kubectl set image deployment/command-poller poller=${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} -n agentkit
+          kubectl set image deployment/content-distribution distributor=${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} -n agentkit
+          kubectl set image deployment/site-scanner scanner=${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} -n agentkit
+          kubectl set image deployment/report-generator generator=${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} -n agentkit
+          
+          # Wait for rollout
+          kubectl rollout status deployment/command-poller -n agentkit
+          kubectl rollout status deployment/content-distribution -n agentkit
+          kubectl rollout status deployment/site-scanner -n agentkit
+          kubectl rollout status deployment/report-generator -n agentkit
 
-      - name: Rollout
+      - name: Verify Deployment
         run: |
-          kubectl set image deployment/command-poller      poller=${{ env.IMAGE_POLLER }}:${{ github.sha }} -n agentkit
-          kubectl set image deployment/content-distribution distributor=${{ env.IMAGE_DISTRIB }}:${{ github.sha }} -n agentkit
+          kubectl get pods -n agentkit
+          kubectl get services -n agentkit
