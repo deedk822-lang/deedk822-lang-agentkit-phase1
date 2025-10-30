@@ -21,7 +21,7 @@ permissions:
 jobs:
   build-validate-deploy:
     runs-on: ubuntu-latest
-    environment: production        # add reviewers in GH UI if you want
+    environment: production
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- 1.  WIF auth (no JSON key) ----
+      # ---- 1.  WIF auth ----
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -44,7 +44,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker ${{ vars.REGION }}-docker.pkg.dev
 
-      # ---- 3.  build (re-use your exact Dockerfile) ----
+      # ---- 3.  build ----
       - name: Build ${{ matrix.agent }}
         run: |
           docker build -t ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }} \
@@ -52,10 +52,10 @@ jobs:
           docker tag ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }} \
                      ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:latest
 
-      # ---- 4.  push to Artifact Registry ----
+      # ---- 4.  push ----
       - run: docker push --all-tags ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}
 
-      # ---- 5.  deploy to Cloud Run ----
+      # ---- 5.  deploy ----
       - id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -73,4 +73,4 @@ jobs:
             --set-env-vars=AGENT_NAME=${{ matrix.agent }}
 
       - name: Show URL
-        run: echo "${{ matrix.agent }} deployed to ${{ steps.deploy.outputs.url }}"
+        run: echo "${{ matrix.agent }} live at ${{ steps.deploy.outputs.url }}"
