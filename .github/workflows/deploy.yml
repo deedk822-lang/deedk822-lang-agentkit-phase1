@@ -1,4 +1,4 @@
-name: Build → Deploy (multi-agent)
+name: Build & Push (GHCR)
 
 on:
   push:
@@ -6,22 +6,15 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID:  YOUR_GCP_PROJECT_ID      change
-  REGION:      YOUR_GCP_REGION          change  e.g. us-central1
-  AR_REPO:     YOUR_AR_REPO              change  e.g. agentkit-repo
-  POOL_ID:     github-pool
-  PROVIDER_ID: github-provider
-  DEPLOYER_SA: github-deployer@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
-  RUNTIME_SA:  cloud-run-runtime@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
-
-permissions:
-  id-token: write
-  contents: read
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}
 
 jobs:
-  build-validate-deploy:
+  build-push:
     runs-on: ubuntu-latest
-    environment: production
+    permissions:
+      contents: read
+      packages: write           allow push to GHCR
     strategy:
       fail-fast: false
       matrix:
@@ -33,44 +26,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-       1.  WIF auth 
-      - id: auth
-        uses: google-github-actions/auth@v2
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          workload_identity_provider: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.POOL_ID }}/providers/${{ vars.PROVIDER_ID }}
-          service_account: ${{ vars.DEPLOYER_SA }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}    auto-generated, no manual secret
 
-      2.  gcloud & docker 
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker ${{ vars.REGION }}-docker.pkg.dev
-
-      3.  build 
-      - name: Build ${{ matrix.agent }}
-        run: |
-          docker build -t ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }} \
-                       -f agents/${{ matrix.agent }}/Dockerfile agents/${{ matrix.agent }}
-          docker tag ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }} \
-                     ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:latest
-
-      4.  push 
-      - run: docker push --all-tags ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}
-
-      5.  deploy
-      - id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
-          service: ${{ matrix.agent }}
-          image: ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }}
-          region: ${{ vars.REGION }}
-          project_id: ${{ vars.PROJECT_ID }}
-          flags: |
-            --service-account=${{ vars.RUNTIME_SA }}
-            --no-allow-unauthenticated
-            --execution-environment=gen2
-            --cpu=1 --memory=512Mi
-            --min-instances=1 --max-instances=10
-            --concurrency=1 --timeout=300s
-            --set-env-vars=AGENT_NAME=${{ matrix.agent }}
-
-      - name: Show URL
-        run: echo "${{ matrix.agent }} live at ${{ steps.deploy.outputs.url }}"
+          context: agents/${{ matrix.agent }}
+          file: agents/${{ matrix.agent }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}/${{ matrix.agent }}:${{ github.sha }}
+            ${{ env.IMAGE_BASE }}/${{ matrix.agent }}:latest
