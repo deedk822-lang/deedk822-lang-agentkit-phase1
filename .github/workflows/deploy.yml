@@ -1,44 +1,14 @@
-name: Build & Push (GHCR)
+# 1. (Already done by me, but you should ensure it's installed on your machine)
+curl -L https://fly.io/install.sh | sh
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+# 2. Create the Fly.io application
+fly apps create agentkit-leo --org personal
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}
+# 3. Generate the API token for GitHub Actions
+# This command will output a JSON object. You need to copy the long token string from it.
+fly tokens create agentkit-leo -j
 
-jobs:
-  build-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write          allow push to GHCR
-    strategy:
-      fail-fast: false
-      matrix:
-        agent:
-          - agentkit-command-poller
-          - agentkit-content-distribution
-          - agentkit-site-scanner
-          - agentkit-report-generator
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   auto-generated, no manual secret
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: agents/${{ matrix.agent }}
-          file: agents/${{ matrix.agent }}/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_BASE }}/${{ matrix.agent }}:${{ github.sha }}
-            ${{ env.IMAGE_BASE }}/${{ matrix.agent }}:latest
+# 4. Add the token as a secret to your GitHub repository
+# Replace <paste-token> with the token you copied from the previous step.
+gh secret set FLY_API_TOKEN --body "<paste-token>"
+# OR, use the GitHub web UI: Settings → Secrets → New repository secret
