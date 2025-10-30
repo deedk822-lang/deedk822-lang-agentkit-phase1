@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID:  YOUR_GCP_PROJECT_ID      # <--- change
-  REGION:      YOUR_GCP_REGION          # <--- change  e.g. us-central1
-  AR_REPO:     YOUR_AR_REPO              # <--- change  e.g. agentkit-repo
+  PROJECT_ID:  YOUR_GCP_PROJECT_ID      change
+  REGION:      YOUR_GCP_REGION          change  e.g. us-central1
+  AR_REPO:     YOUR_AR_REPO              change  e.g. agentkit-repo
   POOL_ID:     github-pool
   PROVIDER_ID: github-provider
   DEPLOYER_SA: github-deployer@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
@@ -33,18 +33,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- 1.  WIF auth ----
+       1.  WIF auth 
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.POOL_ID }}/providers/${{ vars.PROVIDER_ID }}
           service_account: ${{ vars.DEPLOYER_SA }}
 
-      # ---- 2.  gcloud & docker ----
+      2.  gcloud & docker 
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker ${{ vars.REGION }}-docker.pkg.dev
 
-      # ---- 3.  build ----
+      3.  build 
       - name: Build ${{ matrix.agent }}
         run: |
           docker build -t ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }} \
@@ -52,10 +52,10 @@ jobs:
           docker tag ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:${{ github.sha }} \
                      ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}:latest
 
-      # ---- 4.  push ----
+      4.  push 
       - run: docker push --all-tags ${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}/${{ matrix.agent }}
 
-      # ---- 5.  deploy ----
+      5.  deploy
       - id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
