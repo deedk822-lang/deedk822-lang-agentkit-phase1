@@ -14,7 +14,7 @@ primary_region = "iad"        # pick closest: iad, lhr, sin, ...
   [[services.ports]]
     port = 443
     handlers = ["tls", "http"]
-    force_https = true
+
 
 [[vm]]
   cpu_kind = "shared"
