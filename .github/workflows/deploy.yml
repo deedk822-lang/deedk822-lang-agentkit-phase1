@@ -6,13 +6,130 @@ on:
   workflow_dispatch:
 
 jobs:
+ deedk822-lang-patch-1
+  build-and-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set Lowercase Project ID
+        This step correctly sets REGISTRY_PROJECT_ID in the GITHUB_ENV file
+        run: echo "REGISTRY_PROJECT_ID=$(echo ${{ secrets.GCP_PROJECT_ID }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+       Build & tag all 4 images 
+      - name: Build Command Poller Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
+        run: |
+          echo "Building Command Poller agent..."
+          docker build -f Dockerfile.poller \
+                       -t ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} .
+          docker tag ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/agentkit-command-poller:latest
+          echo "Command Poller build successful"
+
+      - name: Build Content Distribution Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
+        run: |
+          echo "Building Content Distribution agent..."
+          docker build -f Dockerfile.distributor \
+                       -t ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} .
+          docker tag ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/agentkit-content-distribution:latest
+          echo "Content Distribution build successful"
+
+      - name: Build Site Scanner Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
+        run: |
+          echo "Building Site Scanner agent..."
+          docker build -f Dockerfile.scanner \
+                       -t ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} .
+          docker tag ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/agentkit-site-scanner:latest
+          echo "Site Scanner build successful"
+
+      - name: Build Report Generator Image
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
+        run: |
+          echo "Building Report Generator agent..."
+          docker build -f Dockerfile.reports \
+                       -t ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} .
+          docker tag ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/agentkit-report-generator:latest
+          echo "Report Generator build successful"
+
+      - name: Validate Docker Images
+        run: |
+          echo "Validating all Docker images..."
+          docker images | grep agentkit || true
+          echo ""
+          echo "All 4 agent images built successfully!"
+
+      - name: Build Summary
+        run: |
+          echo ""
+          echo "🎉 BUILD SUCCESSFUL – All agents ready!"
+          echo ""
+          echo "📦 Images built:"
+          echo "  • Command Poller"
+          echo "  • Content Distribution"
+          echo "  • Site Scanner"
+          echo "  • Report Generator"
+          echo ""
+
+  deploy-to-gcp:
+
   deploy:
+ main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+ deedk822-lang-patch-1
+      Re-set the lowercase project ID for the deploy job
+      - name: Set Lowercase Project ID for Deployment
+        run: echo "REGISTRY_PROJECT_ID=$(echo ${{ secrets.GCP_PROJECT_ID }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Push all images to GCR
+        env:
+          REGISTRY: gcr.io/${{ env.REGISTRY_PROJECT_ID }}
+        run: |
+          docker push ${{ env.REGISTRY }}/agentkit-command-poller:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/agentkit-content-distribution:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/agentkit-site-scanner:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/agentkit-report-generator:${{ github.sha }}
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
+          location: ${{ secrets.GKE_CLUSTER_ZONE }}
+
+      - name: Deploy to GKE
+
       - uses: superfly/flyctl-actions/deploy-app@v1
         with:
           args: --remote-only
+ main
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
