@@ -13,7 +13,7 @@ primary_region = "iad"        # pick closest: iad, lhr, sin, ...
 
   [[services.ports]]
     port = 443
-    handlers = ["tls", "http"]
+    handlers = ["tls"]
 
 
 [[vm]]
