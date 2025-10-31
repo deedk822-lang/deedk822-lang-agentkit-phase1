@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+WORKDIR /app
+
+# 1. common deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 2. all agents
+COPY agents ./agents
+
+# 3. tiny router (one port, four paths)
+RUN pip install fastapi uvicorn[standard]
+COPY <<EOF /app/main.py
+from fastapi import FastAPI
+import importlib, os
+
+app = FastAPI(title="agentkit-router")
+
+@app.get("/")
+def root(): return {"status":"ok"}
+
+for name in os.listdir("agents"):
+    if name.startswith("agentkit"):
+        mod = importlib.import_module(f"agents.{name}.main")
+        app.mount(f"/{name.replace('agentkit-','')}", mod.app)
+EOF
+
+ENV PYTHONUNBUFFERED=1
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

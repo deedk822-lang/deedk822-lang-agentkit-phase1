@@ -1,0 +1,22 @@
+
+app = "agentkit-leo"
+primary_region = "iad"
+
+[build]
+dockerfile = "Dockerfile.fly"
+
+[[services]]
+auto_start_machines = true
+auto_stop_machines = true
+internal_port = 8_000
+min_machines_running = 0
+protocol = "tcp"
+
+  [[services.ports]]
+  handlers = [ "tls", "http" ]
+  port = 443
+
+[[vm]]
+cpu_kind = "shared"
+cpus = 1
+memory_mb = 512
